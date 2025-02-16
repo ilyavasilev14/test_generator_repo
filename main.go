@@ -43,14 +43,14 @@ func handler(w http.ResponseWriter, r *http.Request) {
             fmt.Fprintf(w, "{ \"error\": \"%s\" }", "Cannot convert currentIdx " + currentIdxQuery + " to uint.")
             return
         }
-        endRange := currentIdx + 2
+        endRange := currentIdx + 50
         if endRange > uint64(len(exerciseList)) {
             endRange = uint64(len(exerciseList))
         }
 
         responseExerciseList := ExerciseListResponse {}
 
-        for idx,exercise := range exerciseList[currentIdx:endRange] { // 2 to just test
+        for idx,exercise := range exerciseList[currentIdx:endRange] {
             if exercise.Name == "" { break }
             responseExerciseList.Names = append(responseExerciseList.Names, exercise.Name)
             responseExerciseList.Ids = append(responseExerciseList.Ids, currentIdx + uint64(idx))
@@ -72,14 +72,14 @@ func handler(w http.ResponseWriter, r *http.Request) {
             fmt.Fprintf(w, "{ \"error\": \"%s\" }", "Cannot convert currentIdx " + currentIdxQuery + " to uint.")
             return
         }
-        endRange := currentIdx + 2
+        endRange := currentIdx + 50
         if endRange > uint64(len(trustedExerciseList)) {
             endRange = uint64(len(trustedExerciseList))
         }
 
         responseExerciseList := ExerciseListResponse {}
 
-        for trustedIdx,exerciseIdx := range trustedExerciseList[currentIdx:endRange] { // 2 to just test
+        for trustedIdx,exerciseIdx := range trustedExerciseList[currentIdx:endRange] {
             exercise := exerciseList[exerciseIdx]
             if exercise.Name == "" { break }
             responseExerciseList.Names = append(responseExerciseList.Names, exercise.Name)
