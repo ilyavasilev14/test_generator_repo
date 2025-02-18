@@ -1,15 +1,16 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"io/fs"
-	"log"
-	"net/http"
-	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
+    "encoding/json"
+    "fmt"
+    "io"
+    "io/fs"
+    "log"
+    "net/http"
+    "os"
+    "path/filepath"
+    "strconv"
+    "strings"
 )
 
 var exerciseList []Exercise
@@ -65,6 +66,45 @@ func handler(w http.ResponseWriter, r *http.Request) {
         }
         responseString := string(response)
         fmt.Fprint(w, responseString)
+    } else if r.URL.Path[1:] == "uploadExercise" {
+        data,err := io.ReadAll(r.Body);
+        if err != nil {
+            fmt.Fprintf(w, "{ \"error\": \"Internal error.\" }")
+            fmt.Println("Failed to read body of the response! Err:", err.Error())
+            return
+        }
+        dataString := string(data)
+        exerciseData := Exercise {}
+        unmarshalErr := json.Unmarshal([]byte(dataString), &exerciseData)
+        if unmarshalErr != nil {
+            fmt.Fprintf(w, "{ \"error\": \"Internal error.\" }")
+            fmt.Println("Unmarshal error! Err:", unmarshalErr.Error())
+            return
+        }
+        exerciseData.Trusted = false
+        exerciseList = append(exerciseList, exerciseData)
+
+        jsonData, err := json.Marshal(exerciseData)
+        if err != nil {
+            fmt.Fprintf(w, "{ \"error\": \"Internal error.\" }")
+            fmt.Println("Failed to get marshal exercise! Err:", err.Error())
+            return
+        }
+
+        fileDirectory, err := os.UserHomeDir()
+        if err != nil {
+            fmt.Fprintf(w, "{ \"error\": \"Internal error.\" }")
+            fmt.Println("Failed to get UserHomeDir! Err:", err.Error())
+            return
+        }
+        fileDirectory += "/TestGeneratorRepo/" + strconv.Itoa(len(exerciseList) - 1) + ".json"
+
+        writeErr := os.WriteFile(fileDirectory, jsonData, 0644)
+        if writeErr != nil {
+            fmt.Fprintf(w, "{ \"error\": \"Internal error.\" }")
+            fmt.Println("Failed to write to the file. Err:", writeErr.Error())
+            return
+        }
     } else if r.URL.Path[1:] == "trustedList" {
         currentIdxQuery := r.URL.Query().Get("currentIdx")
         currentIdx, err := strconv.ParseUint(currentIdxQuery, 10, 64)
@@ -113,7 +153,6 @@ func handler(w http.ResponseWriter, r *http.Request) {
         }
         responseString := string(response)
         fmt.Fprint(w, responseString)
-    } else if r.URL.Path[1:] == "uploadExercise" {
     } else if r.URL.Path[1:] == "search" {
         query := r.URL.Query().Get("query")
         query = strings.ReplaceAll(query, " ", "")
@@ -211,3 +250,4 @@ func loadExercises() {
         return nil
     });
 }
+
