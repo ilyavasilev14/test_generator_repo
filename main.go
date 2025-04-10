@@ -1,20 +1,21 @@
 package main
 
 import (
-    "encoding/json"
-    "fmt"
-    "io"
-    "io/fs"
-    "log"
-    "net/http"
-    "os"
-    "path/filepath"
-    "strconv"
-    "strings"
+	"encoding/json"
+	"fmt"
+	"io"
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 var exerciseList []Exercise
 var trustedExerciseList []int
+var secretCode = os.Getenv("TESTGENERATORREPO_SECRET")
 
 type Exercise struct {
     Name        string
@@ -200,11 +201,143 @@ func handler(w http.ResponseWriter, r *http.Request) {
         }
         responseString := string(responseStringBytes)
         fmt.Fprint(w, responseString)
-    }
+    } else if r.URL.Path[1:] == "trustedSearch" {
+        query := r.URL.Query().Get("query")
+        query = strings.ReplaceAll(query, " ", "")
+        query = strings.ToLower(query)
+
+        response := ExerciseListResponse {}
+        for idx,exerciseIdx := range trustedExerciseList {
+            exercise := exerciseList[exerciseIdx]
+            if len(response.Names) > 100 { break }
+            name := strings.ReplaceAll(exercise.Name, " ", "")
+            name = strings.ToLower(name)
+            if strings.Contains(name, query) {
+                response.Names = append(response.Names, exercise.Name)
+                response.Ids = append(response.Ids, uint64(idx))
+            }
+        }
+        responseStringBytes, err := json.Marshal(response)
+        if err != nil {
+            fmt.Fprintf(w, "{ \"error\": \"Internal error.\" }")
+            fmt.Println("Cannot marshal response to json! Err:", err.Error())
+            return
+        }
+        responseString := string(responseStringBytes)
+        fmt.Fprint(w, responseString)
+    } else if r.URL.Path[1:] == "markTrusted" {
+        secret := r.URL.Query().Get("secret")
+        strId := r.URL.Query().Get("id")
+		if secret != secretCode {
+            fmt.Fprintf(w, "Cannot mark the exercise as trusted! The secret values don't match.")
+            fmt.Println("Cannot mark the exercise as trusted! The secret values don't match.")
+            return
+		}
+		id, err := strconv.Atoi(strId)
+		if err != nil {
+            fmt.Fprintf(w, "Cannot mark the exercise as trusted! Failed to convert the exercise ID to int. " + strId)
+            fmt.Println("Cannot mark the exercise as trusted! Failed to convert the exercise ID to int.", strId)
+            return
+		}
+
+		if len(exerciseList) - 1 < id {
+            fmt.Fprintf(w, "Cannot mark the exercise as trusted! Failed to get an exercise with ID " + strId)
+            fmt.Println("Cannot mark the exercise as trusted! Failed to get an exercise with ID ", strId)
+            return
+		}
+
+		exercise := exerciseList[id]
+		exercise.Trusted = true
+		trustedExerciseList = append(trustedExerciseList, id)
+
+        jsonData, err := json.Marshal(exercise)
+        if err != nil {
+            fmt.Fprintf(w, "{ \"error\": \"Internal error.\" }")
+            fmt.Println("Failed to get marshal exercise! Err:", err.Error())
+            return
+        }
+
+        fileDirectory, err := os.UserHomeDir()
+        if err != nil {
+            fmt.Fprintf(w, "{ \"error\": \"Internal error.\" }")
+            fmt.Println("Failed to get UserHomeDir! Err:", err.Error())
+            return
+        }
+        fileDirectory += "/TestGeneratorRepo/" + strconv.Itoa(id) + ".json"
+
+        writeErr := os.WriteFile(fileDirectory, jsonData, 0644)
+        if writeErr != nil {
+            fmt.Fprintf(w, "{ \"error\": \"Internal error.\" }")
+            fmt.Println("Failed to write to the file. Err:", writeErr.Error())
+            return
+        }
+    } else if r.URL.Path[1:] == "markUntrusted" {
+        secret := r.URL.Query().Get("secret")
+        strId := r.URL.Query().Get("id")
+		if secret != secretCode {
+            fmt.Fprintf(w, "Cannot mark the exercise as untrusted! The secret values don't match.")
+            fmt.Println("Cannot mark the exercise as untrusted! The secret values don't match.")
+            return
+		}
+		id, err := strconv.Atoi(strId)
+		if err != nil {
+            fmt.Fprintf(w, "Cannot mark the exercise as untrusted! Failed to convert the exercise ID to int. " + strId)
+            fmt.Println("Cannot mark the exercise as untrusted! Failed to convert the exercise ID to int.", strId)
+            return
+		}
+
+		if len(exerciseList) - 1 < id {
+            fmt.Fprintf(w, "Cannot mark the exercise as untrusted! Failed to get an exercise with ID " + strId)
+            fmt.Println("Cannot mark the exercise as untrusted! Failed to get an exercise with ID ", strId)
+            return
+		}
+
+		exercise := exerciseList[id]
+		exercise.Trusted = false
+
+		removeIDs := make([]int, 0)
+		for trustedIdx, trustedExercise := range trustedExerciseList {
+			if trustedExercise == id {
+				removeIDs = append(removeIDs, trustedIdx)
+			}
+		}
+		for _, removeID := range removeIDs {
+			slice2 := trustedExerciseList[removeID+1:]
+			trustedExerciseList = append(trustedExerciseList[:removeID], slice2...)
+		}
+
+        jsonData, err := json.Marshal(exercise)
+        if err != nil {
+            fmt.Fprintf(w, "{ \"error\": \"Internal error.\" }")
+            fmt.Println("Failed to get marshal exercise! Err:", err.Error())
+            return
+        }
+
+        fileDirectory, err := os.UserHomeDir()
+        if err != nil {
+            fmt.Fprintf(w, "{ \"error\": \"Internal error.\" }")
+            fmt.Println("Failed to get UserHomeDir! Err:", err.Error())
+            return
+        }
+        fileDirectory += "/TestGeneratorRepo/" + strconv.Itoa(id) + ".json"
+
+        writeErr := os.WriteFile(fileDirectory, jsonData, 0644)
+        if writeErr != nil {
+            fmt.Fprintf(w, "{ \"error\": \"Internal error.\" }")
+            fmt.Println("Failed to write to the file. Err:", writeErr.Error())
+            return
+        }
+	}
 }
 
 func main() {
+	if secretCode == "" {
+		log.Fatal("Set the secret code for remote server management by setting",
+			"the ENVIRONMENT variable 'TESTGENERATORREPO_SECRET'")
+	}
+
     loadExercises()
+	fmt.Println("Scan finished!")
 
     http.HandleFunc("/", handler)
     log.Fatal(http.ListenAndServe(":4001", nil))
@@ -250,4 +383,3 @@ func loadExercises() {
         return nil
     });
 }
-
