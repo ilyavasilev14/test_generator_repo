@@ -249,6 +249,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		exercise := exerciseList[id]
 		exercise.Trusted = true
 		trustedExerciseList = append(trustedExerciseList, id)
+		exerciseList[id] = exercise
 
         jsonData, err := json.Marshal(exercise)
         if err != nil {
@@ -294,6 +295,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 		exercise := exerciseList[id]
 		exercise.Trusted = false
+		exerciseList[id] = exercise
 
 		removeIDs := make([]int, 0)
 		for trustedIdx, trustedExercise := range trustedExerciseList {
